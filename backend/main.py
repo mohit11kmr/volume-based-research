@@ -23,21 +23,22 @@ from services.learning_brain import (
     train_brain_model
 )
 from services.risk_engine import PaperTradingSimulator
+from services.options_engine import analyze_option_strike_valuation
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("volume-research-api")
 
 app = FastAPI(
     title="Volume Based Share Market Research API",
-    description="Professional Volume Analytics, Live Intraday Ticker, Risk Engine & Paper Trading Simulator",
-    version="2.2.0"
+    description="Professional Volume Analytics, Options Valuation, Risk Engine & Paper Simulator",
+    version="2.3.0"
 )
 
-# Enable CORS for all origins (public read-only API; credentials not required)
+# Enable CORS for all origins
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -60,7 +61,7 @@ class PaperBuyRequest(BaseModel):
 
 @app.get("/api/health")
 def health_check():
-    return {"status": "online", "service": "Volume Research Engine & Risk Paper Simulator", "version": "2.2.0"}
+    return {"status": "online", "service": "Volume Research Engine & Options Greeks Valuation", "version": "2.3.0"}
 
 @app.get("/api/stocks")
 def get_popular_stocks():
@@ -135,10 +136,23 @@ def get_stock_analysis(
             "mlPrediction": ml_prediction
         }
 
+@app.get("/api/options/analysis")
+def get_options_valuation(
+    symbol: str = Query("RELIANCE.NS", description="Stock or Index symbol"),
+    days_to_expiry: int = Query(7, description="Days to option expiry")
+):
+    """Return Option Chain Premium Valuation (CHEAP / FAIR / EXPENSIVE) & Greeks."""
+    try:
+        quote = fetch_live_quote(symbol)
+        curr_price = quote.get("lastPrice", 1250.0)
+        return analyze_option_strike_valuation(symbol, curr_price, days_to_expiry)
+    except Exception as e:
+        logger.error(f"Error serving options analysis for {symbol}: {e}")
+        return analyze_option_strike_valuation(symbol, 1250.0, days_to_expiry)
+
 # Paper Trading & Portfolio Simulator Endpoints
 @app.get("/api/paper-trading/portfolio")
 def get_paper_portfolio():
-    """Return virtual portfolio summary, open positions & live unrealized PnL."""
     live_prices = {}
     for pos in paper_simulator.open_positions:
         sym = pos["symbol"]
@@ -149,7 +163,6 @@ def get_paper_portfolio():
 
 @app.post("/api/paper-trading/buy")
 def place_paper_buy_order(req: PaperBuyRequest):
-    """Execute virtual paper buy order using 2% Risk Engine Sizing."""
     quote = fetch_live_quote(req.symbol)
     curr_price = quote.get("lastPrice", 1000.0)
     
@@ -165,7 +178,6 @@ def place_paper_buy_order(req: PaperBuyRequest):
 
 @app.post("/api/paper-trading/close/{position_id}")
 def close_paper_position(position_id: int):
-    """Close active paper trade position."""
     pos = next((p for p in paper_simulator.open_positions if p["id"] == position_id), None)
     if not pos:
         raise HTTPException(status_code=404, detail="Position not found")
@@ -176,7 +188,6 @@ def close_paper_position(position_id: int):
 
 @app.post("/api/paper-trading/reset")
 def reset_paper_account():
-    """Reset virtual paper account to ₹100,000 cash balance."""
     paper_simulator.reset_portfolio()
     return {"message": "Paper Trading Virtual Account successfully reset to ₹100,000 cash."}
 

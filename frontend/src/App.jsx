@@ -8,9 +8,10 @@ import Backtesting from './components/Backtesting';
 import AIInsights from './components/AIInsights';
 import BrainDashboard from './components/BrainDashboard';
 import PaperTrading from './components/PaperTrading';
+import OptionsValuation from './components/OptionsValuation';
 import HostingGuideModal from './components/HostingGuideModal';
 import { fetchPopularStocks, fetchStockAnalysis } from './services/api';
-import { BarChart3, Filter, Play, Cpu, AlertCircle, Sparkles, DollarSign } from 'lucide-react';
+import { BarChart3, Filter, Play, Cpu, AlertCircle, Sparkles, DollarSign, Tag } from 'lucide-react';
 
 export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('RELIANCE.NS');
@@ -88,6 +89,12 @@ export default function App() {
             <Filter size={18} /> Volume Surge Screener
           </button>
           <button
+            className={`tab-btn ${activeTab === 'options' ? 'active' : ''}`}
+            onClick={() => setActiveTab('options')}
+          >
+            <Tag size={18} color="var(--accent-gold)" /> Option Valuation & Greeks
+          </button>
+          <button
             className={`tab-btn ${activeTab === 'brain' ? 'active' : ''}`}
             onClick={() => setActiveTab('brain')}
           >
@@ -140,17 +147,22 @@ export default function App() {
           <VolumeScreener onSelectSymbol={(sym) => { setSelectedSymbol(sym); setActiveTab('dashboard'); }} />
         )}
 
-        {/* Tab 3: AI Self-Learning Brain */}
+        {/* Tab 3: Options Valuation */}
+        {activeTab === 'options' && (
+          <OptionsValuation selectedSymbol={selectedSymbol} />
+        )}
+
+        {/* Tab 4: AI Self-Learning Brain */}
         {activeTab === 'brain' && (
           <BrainDashboard selectedSymbol={selectedSymbol} onApplyStrategy={handleApplyStrategy} />
         )}
 
-        {/* Tab 4: Paper Trading */}
+        {/* Tab 5: Paper Trading */}
         {activeTab === 'paper' && (
           <PaperTrading selectedSymbol={selectedSymbol} />
         )}
 
-        {/* Tab 5: Backtest */}
+        {/* Tab 6: Backtest */}
         {activeTab === 'backtest' && (
           <Backtesting selectedSymbol={selectedSymbol} initialStrategy={appliedStrategy} />
         )}
