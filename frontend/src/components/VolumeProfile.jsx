@@ -5,7 +5,7 @@ export default function VolumeProfile({ stockData }) {
   if (!stockData || !stockData.volumeProfile) return null;
   const { volumeProfile, symbol } = stockData;
 
-  const maxVol = Math.max(...volumeProfile.map(p => p.totalVolume), 1);
+  const maxVol = Math.max(...volumeProfile.map(p => p.volume || 0), 1);
 
   return (
     <div className="card">
@@ -22,8 +22,8 @@ export default function VolumeProfile({ stockData }) {
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
         {volumeProfile.map((bin, index) => {
-          const fillWidthPct = Math.round((bin.totalVolume / maxVol) * 100);
-          const buyPct = bin.totalVolume > 0 ? Math.round((bin.buyVolume / bin.totalVolume) * 100) : 50;
+          const volValue = bin.volume || 0;
+          const fillWidthPct = Math.round((volValue / maxVol) * 100);
 
           return (
             <div key={index} style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
@@ -33,7 +33,7 @@ export default function VolumeProfile({ stockData }) {
                   ₹{bin.priceRange}
                 </span>
                 <span style={{ color: 'var(--text-muted)' }}>
-                  {(bin.totalVolume / 1000).toFixed(0)}k shares ({buyPct}% buy)
+                  {(volValue / 1000).toFixed(0)}k shares
                 </span>
               </div>
 
@@ -50,7 +50,7 @@ export default function VolumeProfile({ stockData }) {
                   height: '100%',
                   background: bin.isPOC
                     ? 'linear-gradient(90deg, #FFD700, #FFA500)'
-                    : `linear-gradient(90deg, #00F5A0 ${buyPct}%, #FF3366 ${buyPct}%)`,
+                    : 'linear-gradient(90deg, #00F5A0, #38BDF8)',
                   borderRadius: '4px',
                   transition: 'width 0.4s ease'
                 }} />

@@ -1,6 +1,7 @@
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
+from typing import Dict, Any
 import logging
 
 try:
@@ -98,7 +99,8 @@ def fetch_stock_data(symbol: str, period: str = "6m", interval: str = "1d") -> p
                 date_fmt = "%H:%M" if interval in ["1m", "5m", "15m"] else "%Y-%m-%d"
                 
                 if date_col:
-                    df["Date"] = pd.to_datetime(df[date_col]).dt.strftime(date_fmt)
+                    parsed_dates = pd.to_datetime(df[date_col], errors="coerce")
+                    df["Date"] = parsed_dates.dt.strftime(date_fmt).fillna(datetime.now().strftime(date_fmt))
                 else:
                     df["Date"] = [datetime.now().strftime(date_fmt)] * len(df)
                     

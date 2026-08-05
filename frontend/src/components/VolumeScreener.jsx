@@ -98,8 +98,8 @@ export default function VolumeScreener({ onSelectSymbol }) {
                     </td>
                     <td>
                       <span className={
-                        stk.signal.includes("Bullish") ? "badge badge-success" :
-                        stk.signal.includes("Bearish") ? "badge badge-danger" : "badge badge-warning"
+                        /BULLISH/i.test(stk.signal || "") ? "badge badge-success" :
+                        /BEARISH/i.test(stk.signal || "") ? "badge badge-danger" : "badge badge-warning"
                       }>
                         {stk.signal}
                       </span>

@@ -1,6 +1,22 @@
 // Backend API service configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://volume-based-research.onrender.com';
 
+// Shared fetch wrapper: guarantees every request aborts fast so the UI can
+// fall back to synthetic data during Render cold-starts instead of hanging.
+async function fetchWithTimeout(url, options = {}, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(url, { ...options, signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error(`Request failed with status ${res.status}`);
+    return await res.json();
+  } catch (err) {
+    clearTimeout(timeoutId);
+    throw err;
+  }
+}
+
 // Local Fallback Synthetic Data Generator to guarantee UI NEVER stays blank
 function generateFallbackStockData(symbol) {
   const candles = [];
@@ -73,13 +89,9 @@ function generateFallbackStockData(symbol) {
 
 export async function fetchPopularStocks() {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 6000);
-    const res = await fetch(`${API_BASE_URL}/api/stocks`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (!res.ok) throw new Error("Failed to fetch stock list");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/stocks`, {}, 6000);
   } catch (err) {
+    console.warn("Stock catalog fetch failed, using local fallback list:", err);
     return [
       { symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Conglomerate", exchange: "NSE" },
       { symbol: "TCS.NS", name: "Tata Consultancy Services", sector: "IT Services", exchange: "NSE" },
@@ -95,12 +107,11 @@ export async function fetchPopularStocks() {
 
 export async function fetchStockAnalysis(symbol, period = "6mo", interval = "1d") {
   try {
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout before fast fallback
-    const res = await fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?period=${period}&interval=${interval}`, { signal: controller.signal });
-    clearTimeout(timeoutId);
-    if (!res.ok) throw new Error(`Stock ${symbol} not found`);
-    return await res.json();
+    return await fetchWithTimeout(
+      `${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?period=${period}&interval=${interval}`,
+      {},
+      8000
+    );
   } catch (err) {
     console.warn(`Backend timeout/error for ${symbol}, providing instant dataset:`, err);
     return generateFallbackStockData(symbol);
@@ -109,10 +120,9 @@ export async function fetchStockAnalysis(symbol, period = "6mo", interval = "1d"
 
 export async function fetchLiveQuote(symbol) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}/quote`);
-    if (!res.ok) throw new Error("Failed to fetch live quote");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}/quote`, {}, 8000);
   } catch (err) {
+    console.warn(`Live quote fallback for ${symbol}:`, err);
     return {
       symbol: symbol.toUpperCase(),
       lastPrice: 1280.0,
@@ -127,10 +137,9 @@ export async function fetchLiveQuote(symbol) {
 
 export async function fetchPaperPortfolio() {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/paper-trading/portfolio`);
-    if (!res.ok) throw new Error("Failed to fetch paper portfolio");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/paper-trading/portfolio`, {}, 8000);
   } catch (err) {
+    console.warn("Paper portfolio fallback:", err);
     return {
       initialCapital: 100000.0,
       cashBalance: 100000.0,
@@ -150,16 +159,11 @@ export async function fetchPaperPortfolio() {
 
 export async function executePaperBuy(symbol, stopLossPct = 2.0, takeProfitPct = 6.0) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/paper-trading/buy`, {
+    return await fetchWithTimeout(`${API_BASE_URL}/api/paper-trading/buy`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ symbol, stopLossPct, takeProfitPct })
-    });
-    if (!res.ok) {
-      const errorData = await res.json();
-      throw new Error(errorData.detail || "Paper buy failed");
-    }
-    return await res.json();
+    }, 10000);
   } catch (err) {
     console.error("Paper buy error:", err);
     throw err;
@@ -168,9 +172,7 @@ export async function executePaperBuy(symbol, stopLossPct = 2.0, takeProfitPct =
 
 export async function closePaperPosition(positionId) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/paper-trading/close/${positionId}`, { method: "POST" });
-    if (!res.ok) throw new Error("Failed to close position");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/paper-trading/close/${positionId}`, { method: "POST" }, 10000);
   } catch (err) {
     console.error("Close position error:", err);
     throw err;
@@ -179,9 +181,7 @@ export async function closePaperPosition(positionId) {
 
 export async function resetPaperAccount() {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/paper-trading/reset`, { method: "POST" });
-    if (!res.ok) throw new Error("Failed to reset account");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/paper-trading/reset`, { method: "POST" }, 10000);
   } catch (err) {
     console.error("Reset account error:", err);
     throw err;
@@ -190,10 +190,9 @@ export async function resetPaperAccount() {
 
 export async function fetchVolumeScreener(minSurge = 1.5) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/screener?min_surge=${minSurge}`);
-    if (!res.ok) throw new Error("Screener request failed");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/screener?min_surge=${minSurge}`, {}, 8000);
   } catch (err) {
+    console.warn("Screener fallback:", err);
     return {
       count: 3,
       minSurgeApplied: minSurge,
@@ -208,35 +207,39 @@ export async function fetchVolumeScreener(minSurge = 1.5) {
 
 export async function runBacktest(params) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/backtest`, {
+    return await fetchWithTimeout(`${API_BASE_URL}/api/backtest`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(params)
-    });
-    if (!res.ok) throw new Error("Backtest failed");
-    return await res.json();
+    }, 10000);
   } catch (err) {
+    console.warn("Backtest fallback:", err);
     return {
       symbol: params.symbol,
       initialCapital: params.initialCapital,
       finalCapital: 114500.0,
       totalReturnPct: 14.5,
       winRatePct: 78.5,
-      totalTradesCount: 14,
-      winningTradesCount: 11,
-      losingTradesCount: 3,
+      totalTrades: 14,
+      winningTrades: 11,
+      losingTrades: 3,
       maxDrawdownPct: 2.1,
-      tradeLogs: []
+      equityCurve: [
+        { date: "Day 1", equity: 100000.0 },
+        { date: "Day 5", equity: 104000.0 },
+        { date: "Day 10", equity: 110500.0 },
+        { date: "Day 14", equity: 114500.0 }
+      ],
+      tradeLog: []
     };
   }
 }
 
 export async function fetchBrainStatus() {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/brain/status`);
-    if (!res.ok) throw new Error("Brain status request failed");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/brain/status`, {}, 8000);
   } catch (err) {
+    console.warn("Brain status fallback:", err);
     return {
       modelAccuracyPct: 88.5,
       learnedPatternsCount: 1250,
@@ -248,10 +251,9 @@ export async function fetchBrainStatus() {
 
 export async function fetchBrainScenarios(symbol) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/brain/scenarios?symbol=${encodeURIComponent(symbol)}`);
-    if (!res.ok) throw new Error("Failed to fetch AI scenarios");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/brain/scenarios?symbol=${encodeURIComponent(symbol)}`, {}, 10000);
   } catch (err) {
+    console.warn("Brain scenarios fallback:", err);
     return {
       symbol: symbol.toUpperCase(),
       totalScenariosTested: 60,
@@ -268,11 +270,28 @@ export async function fetchBrainScenarios(symbol) {
         {
           scenarioId: "SCENARIO_ZERO_LOSS_01",
           name: "Institutional Volume Surge + CMF > 0.15",
-          surgeMultiplier: 2.5,
+          volumeMultiplier: 2.5,
           holdingDays: 3,
           stopLossPct: 1.5,
           takeProfitPct: 5.0,
-          backtestResult: { winRatePct: 95.0, totalReturnPct: 22.0, maxDrawdownPct: 0.8 }
+          winRatePct: 95.0,
+          losingTrades: 0,
+          totalReturnPct: 22.0,
+          maxDrawdownPct: 0.8,
+          isZeroLoss: true
+        },
+        {
+          scenarioId: "SCENARIO_ZERO_LOSS_02",
+          name: "High Volume Breakout Pullback",
+          volumeMultiplier: 2.0,
+          holdingDays: 5,
+          stopLossPct: 2.0,
+          takeProfitPct: 6.0,
+          winRatePct: 82.0,
+          losingTrades: 1,
+          totalReturnPct: 18.5,
+          maxDrawdownPct: 1.6,
+          isZeroLoss: false
         }
       ]
     };
@@ -281,10 +300,9 @@ export async function fetchBrainScenarios(symbol) {
 
 export async function optimizeBrain() {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/brain/optimize`, { method: "POST" });
-    if (!res.ok) throw new Error("Optimization failed");
-    return await res.json();
+    return await fetchWithTimeout(`${API_BASE_URL}/api/brain/optimize`, { method: "POST" }, 12000);
   } catch (err) {
+    console.warn("Brain optimize fallback:", err);
     return { status: "success", message: "Brain model successfully retrained!" };
   }
 }

@@ -1,13 +1,31 @@
 import React from 'react';
-import { Cpu, CheckCircle2, AlertTriangle, ArrowRight } from 'lucide-react';
+import { Cpu, CheckCircle2, AlertTriangle, ArrowRight, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 export default function AIInsights({ stockData }) {
   if (!stockData || !stockData.aiReport) return null;
   const { aiReport, symbol } = stockData;
-  const { signal, confidence, volumeSurgeRatio, cmf, obvTrend, keyInsights } = aiReport;
 
-  const isBullish = signal.includes("BULLISH") || signal.includes("ACCUMULATION");
-  const isBearish = signal.includes("BEARISH") || signal.includes("DISTRIBUTION");
+  const recommendation = aiReport.recommendation || "NEUTRAL / HOLD";
+  const confidence = aiReport.marketRegime?.confidence ?? 50.0;
+  const regime = aiReport.marketRegime?.regime || "SIDEWAYS";
+  const volSurge = aiReport.marketRegime?.volSurge ?? 1.0;
+  const rsi14 = aiReport.marketRegime?.rsi14 ?? "N/A";
+  const atrPct = aiReport.marketRegime?.atrPct ?? "N/A";
+  const summary = aiReport.summary || `Institutional volume analysis for ${symbol}.`;
+  const keyLevels = aiReport.keyLevels || {};
+
+  const isBullish = /BULLISH|BUY|ACCUMULATION/i.test(recommendation);
+  const isBearish = /BEARISH|SELL|SHORT|DISTRIBUTION/i.test(recommendation);
+
+  const insights = [
+    { icon: <CheckCircle2 size={14} />, text: `Market Regime: ${regime} (${confidence}% confidence)` },
+    { icon: <CheckCircle2 size={14} />, text: `Volume Surge vs 20-Day SMA: ${volSurge}x` },
+    { icon: <CheckCircle2 size={14} />, text: `RSI(14): ${rsi14} | ATR%: ${atrPct}` },
+    ...(keyLevels.support || keyLevels.resistance ? [{
+      icon: <ShieldCheck size={14} />,
+      text: `Key Levels — Support: ₹${keyLevels.support ?? 'N/A'} | Resistance: ₹${keyLevels.resistance ?? 'N/A'} | VWAP: ₹${keyLevels.vwap ?? 'N/A'}`
+    }] : [])
+  ];
 
   return (
     <div className="card">
@@ -26,7 +44,9 @@ export default function AIInsights({ stockData }) {
         padding: '16px',
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'space-between'
+        justifyContent: 'space-between',
+        flexWrap: 'wrap',
+        gap: '10px'
       }}>
         <div>
           <span style={{ fontSize: '0.78rem', color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
@@ -38,22 +58,27 @@ export default function AIInsights({ stockData }) {
             color: isBullish ? 'var(--accent-green)' : isBearish ? 'var(--accent-red)' : 'var(--accent-gold)',
             marginTop: 2
           }}>
-            {signal}
+            {recommendation}
           </div>
         </div>
 
         <div style={{ textAlign: 'right' }}>
-          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Confidence</span>
-          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#FFF' }}>{confidence}</div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Regime Confidence</span>
+          <div style={{ fontSize: '1.1rem', fontWeight: 700, color: '#FFF' }}>{confidence}%</div>
         </div>
       </div>
 
+      {/* AI Summary */}
+      <p style={{ fontSize: '0.88rem', lineHeight: '1.6', color: 'var(--text-main)', margin: '14px 0 0' }}>
+        {summary}
+      </p>
+
       {/* Key Insights List */}
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginTop: '12px' }}>
         <span style={{ fontSize: '0.88rem', fontWeight: 600, color: 'var(--text-muted)' }}>
           Technical Observations:
         </span>
-        {keyInsights && keyInsights.map((insight, idx) => (
+        {insights.map((insight, idx) => (
           <div key={idx} style={{
             display: 'flex',
             alignItems: 'flex-start',
@@ -64,8 +89,10 @@ export default function AIInsights({ stockData }) {
             fontSize: '0.88rem',
             lineHeight: '1.5'
           }}>
-            <ArrowRight size={16} color="var(--accent-green)" style={{ marginTop: 2, flexShrink: 0 }} />
-            <div dangerouslySetInnerHTML={{ __html: insight.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') }} />
+            <span style={{ color: 'var(--accent-green)', marginTop: 2, flexShrink: 0, display: 'inline-flex' }}>
+              {insight.icon}
+            </span>
+            <div>{insight.text}</div>
           </div>
         ))}
       </div>
