@@ -21,7 +21,8 @@ backend/venv/
 backend/ENV/
 backend/.env
 
-# IDE / OS
+# Workflows & IDE / OS
+.github/
 .DS_Store
 Thumbs.db
 .vscode/
