@@ -1,7 +1,8 @@
 // Backend API service configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://volume-based-research.onrender.com';
+// Default to relative '/api' on Vercel, or custom VITE_API_URL if provided
+const API_BASE_URL = import.meta.env.VITE_API_URL || '';
 
-// Local Fallback Synthetic Generator to ensure UI never stays blank even during Render cold-starts
+// Local Fallback Synthetic Generator to ensure UI never stays blank
 function generateFallbackStockData(symbol) {
   const dates = [];
   const candles = [];
@@ -75,7 +76,7 @@ function generateFallbackStockData(symbol) {
 export async function fetchPopularStocks() {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 10000);
     const res = await fetch(`${API_BASE_URL}/api/stocks`, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (!res.ok) throw new Error("Failed to fetch stock list");
@@ -98,7 +99,7 @@ export async function fetchPopularStocks() {
 export async function fetchStockAnalysis(symbol, period = "6mo", interval = "1d") {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 15000); // 15s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
     const res = await fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?period=${period}&interval=${interval}`, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (!res.ok) throw new Error(`Stock ${symbol} not found`);
