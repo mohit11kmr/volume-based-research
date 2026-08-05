@@ -1,5 +1,5 @@
 // Backend API service configuration
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://volume-based-research.onrender.com';
 
 export async function fetchPopularStocks() {
   try {
@@ -7,7 +7,7 @@ export async function fetchPopularStocks() {
     if (!res.ok) throw new Error("Failed to fetch stock list");
     return await res.json();
   } catch (err) {
-    console.warn("API Offline, using default catalog:", err);
+    console.warn("API Offline or cold-starting, using default catalog:", err);
     return [
       { symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Conglomerate", exchange: "NSE" },
       { symbol: "TCS.NS", name: "Tata Consultancy Services", sector: "IT Services", exchange: "NSE" },
