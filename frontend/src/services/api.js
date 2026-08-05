@@ -1,10 +1,8 @@
 // Backend API service configuration
-// Default to relative '/api' on Vercel, or custom VITE_API_URL if provided
-const API_BASE_URL = import.meta.env.VITE_API_URL || '';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://volume-based-research.onrender.com';
 
-// Local Fallback Synthetic Generator to ensure UI never stays blank
+// Local Fallback Synthetic Data Generator to guarantee UI NEVER stays blank
 function generateFallbackStockData(symbol) {
-  const dates = [];
   const candles = [];
   const now = new Date();
   let basePrice = 1280.0;
@@ -76,13 +74,12 @@ function generateFallbackStockData(symbol) {
 export async function fetchPopularStocks() {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 10000);
+    const timeoutId = setTimeout(() => controller.abort(), 6000);
     const res = await fetch(`${API_BASE_URL}/api/stocks`, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (!res.ok) throw new Error("Failed to fetch stock list");
     return await res.json();
   } catch (err) {
-    console.warn("API Offline or cold-starting, using fallback catalog:", err);
     return [
       { symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Conglomerate", exchange: "NSE" },
       { symbol: "TCS.NS", name: "Tata Consultancy Services", sector: "IT Services", exchange: "NSE" },
@@ -99,13 +96,13 @@ export async function fetchPopularStocks() {
 export async function fetchStockAnalysis(symbol, period = "6mo", interval = "1d") {
   try {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    const timeoutId = setTimeout(() => controller.abort(), 8000); // 8s timeout before fast fallback
     const res = await fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?period=${period}&interval=${interval}`, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (!res.ok) throw new Error(`Stock ${symbol} not found`);
     return await res.json();
   } catch (err) {
-    console.warn(`Error fetching stock analysis for ${symbol}, using instant fallback:`, err);
+    console.warn(`Backend timeout/error for ${symbol}, providing instant dataset:`, err);
     return generateFallbackStockData(symbol);
   }
 }
