@@ -43,6 +43,70 @@ export async function fetchLiveQuote(symbol) {
   }
 }
 
+export async function fetchPaperPortfolio() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/paper-trading/portfolio`);
+    if (!res.ok) throw new Error("Failed to fetch paper portfolio");
+    return await res.json();
+  } catch (err) {
+    console.warn("Paper portfolio API offline:", err);
+    return {
+      initialCapital: 100000.0,
+      cashBalance: 100000.0,
+      totalPortfolioValue: 100000.0,
+      realizedPnl: 0.0,
+      unrealizedPnl: 0.0,
+      totalPnl: 0.0,
+      totalPnlPct: 0.0,
+      winRatePct: 0.0,
+      openPositionsCount: 0,
+      closedTradesCount: 0,
+      openPositions: [],
+      tradeHistory: []
+    };
+  }
+}
+
+export async function executePaperBuy(symbol, stopLossPct = 2.0, takeProfitPct = 6.0) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/paper-trading/buy`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ symbol, stopLossPct, takeProfitPct })
+    });
+    if (!res.ok) {
+      const errorData = await res.json();
+      throw new Error(errorData.detail || "Paper buy failed");
+    }
+    return await res.json();
+  } catch (err) {
+    console.error("Paper buy error:", err);
+    throw err;
+  }
+}
+
+export async function closePaperPosition(positionId) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/paper-trading/close/${positionId}`, { method: "POST" });
+    if (!res.ok) throw new Error("Failed to close position");
+    return await res.json();
+  } catch (err) {
+    console.error("Close position error:", err);
+    throw err;
+  }
+}
+
+export async function resetPaperAccount() {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/paper-trading/reset`, { method: "POST" });
+    if (!res.ok) throw new Error("Failed to reset account");
+    return await res.json();
+  } catch (err) {
+    console.error("Reset account error:", err);
+    throw err;
+  }
+}
+
 export async function fetchVolumeScreener(minSurge = 1.5) {
   try {
     const res = await fetch(`${API_BASE_URL}/api/screener?min_surge=${minSurge}`);

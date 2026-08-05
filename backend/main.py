@@ -22,14 +22,15 @@ from services.learning_brain import (
     predict_ml_win_probability,
     train_brain_model
 )
+from services.risk_engine import PaperTradingSimulator
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("volume-research-api")
 
 app = FastAPI(
     title="Volume Based Share Market Research API",
-    description="Professional Volume Analytics, Live Intraday Ticker, AI Brain & Strategy Backtesting Engine",
-    version="2.1.0"
+    description="Professional Volume Analytics, Live Intraday Ticker, Risk Engine & Paper Trading Simulator",
+    version="2.2.0"
 )
 
 # Enable CORS for all origins
@@ -41,6 +42,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Instantiate Global Paper Trading Simulator
+paper_simulator = PaperTradingSimulator(initial_capital=100000.0)
+
 class BacktestRequest(BaseModel):
     symbol: str = "RELIANCE.NS"
     volumeMultiplier: float = 2.0
@@ -49,18 +53,21 @@ class BacktestRequest(BaseModel):
     takeProfitPct: float = 6.0
     initialCapital: float = 100000.0
 
+class PaperBuyRequest(BaseModel):
+    symbol: str = "RELIANCE.NS"
+    stopLossPct: float = 2.0
+    takeProfitPct: float = 6.0
+
 @app.get("/api/health")
 def health_check():
-    return {"status": "online", "service": "Volume Research Engine & Real-time Live Ticker", "version": "2.1.0"}
+    return {"status": "online", "service": "Volume Research Engine & Risk Paper Simulator", "version": "2.2.0"}
 
 @app.get("/api/stocks")
 def get_popular_stocks():
-    """Return catalog of tracked Indian and International stocks."""
     return POPULAR_STOCKS
 
 @app.get("/api/stocks/{symbol}/quote")
 def get_stock_live_quote(symbol: str):
-    """Return instant real-time live ticker quote (LTP, Change %, Market Status)."""
     try:
         return fetch_live_quote(symbol)
     except Exception as e:
@@ -81,7 +88,6 @@ def get_stock_analysis(
     period: str = Query("6mo", description="Historical period (1d, 5d, 1mo, 6mo, 1y, 2y, 5y)"),
     interval: str = Query("1d", description="Candle interval (1m, 5m, 15m, 1d)")
 ):
-    """Fetch candlestick data, computed indicators, volume profile, ML Win Probability and AI analysis."""
     try:
         df_raw = fetch_stock_data(symbol, period=period, interval=interval)
         if df_raw.empty:
@@ -129,14 +135,57 @@ def get_stock_analysis(
             "mlPrediction": ml_prediction
         }
 
+# Paper Trading & Portfolio Simulator Endpoints
+@app.get("/api/paper-trading/portfolio")
+def get_paper_portfolio():
+    """Return virtual portfolio summary, open positions & live unrealized PnL."""
+    live_prices = {}
+    for pos in paper_simulator.open_positions:
+        sym = pos["symbol"]
+        quote = fetch_live_quote(sym)
+        live_prices[sym] = quote.get("lastPrice", pos["entryPrice"])
+        
+    return paper_simulator.get_portfolio_summary(live_prices)
+
+@app.post("/api/paper-trading/buy")
+def place_paper_buy_order(req: PaperBuyRequest):
+    """Execute virtual paper buy order using 2% Risk Engine Sizing."""
+    quote = fetch_live_quote(req.symbol)
+    curr_price = quote.get("lastPrice", 1000.0)
+    
+    res = paper_simulator.execute_paper_buy(
+        symbol=req.symbol,
+        current_price=curr_price,
+        stop_loss_pct=req.stopLossPct,
+        take_profit_pct=req.takeProfitPct
+    )
+    if not res["success"]:
+        raise HTTPException(status_code=400, detail=res["message"])
+    return res
+
+@app.post("/api/paper-trading/close/{position_id}")
+def close_paper_position(position_id: int):
+    """Close active paper trade position."""
+    pos = next((p for p in paper_simulator.open_positions if p["id"] == position_id), None)
+    if not pos:
+        raise HTTPException(status_code=404, detail="Position not found")
+        
+    quote = fetch_live_quote(pos["symbol"])
+    exit_p = quote.get("lastPrice", pos["entryPrice"])
+    return paper_simulator.close_position(position_id, exit_p, reason="Manual Exit")
+
+@app.post("/api/paper-trading/reset")
+def reset_paper_account():
+    """Reset virtual paper account to ₹100,000 cash balance."""
+    paper_simulator.reset_portfolio()
+    return {"message": "Paper Trading Virtual Account successfully reset to ₹100,000 cash."}
+
 @app.get("/api/brain/status")
 def get_ai_brain_status():
-    """Return AI Model Accuracy, Learned Patterns, and Feature Importance Weights."""
     return get_brain_status()
 
 @app.get("/api/brain/scenarios")
 def get_ai_scenarios(symbol: str = "RELIANCE.NS"):
-    """Generate, backtest, and rank 60+ strategy scenarios to find Zero-Loss and optimal setups."""
     try:
         df_raw = fetch_stock_data(symbol, period="1y", interval="1d")
         if df_raw.empty or len(df_raw) < 25:
@@ -150,7 +199,6 @@ def get_ai_scenarios(symbol: str = "RELIANCE.NS"):
 
 @app.post("/api/brain/optimize")
 def retrain_ai_brain():
-    """Trigger AI Scenario Generator execution and retrain RandomForest model across market stocks."""
     stocks_dict = {}
     for item in POPULAR_STOCKS:
         sym = item["symbol"]
@@ -168,9 +216,7 @@ def run_screener(
     min_surge: float = Query(1.5, description="Minimum Volume Surge Multiplier"),
     sector: Optional[str] = None
 ):
-    """Screen all tracked stocks for volume surges and ML Win Probability."""
     results = []
-    
     for item in POPULAR_STOCKS:
         sym = item["symbol"]
         try:
@@ -217,7 +263,6 @@ def run_screener(
 
 @app.post("/api/backtest")
 def execute_backtest(req: BacktestRequest):
-    """Execute strategy backtest based on volume breakout rules."""
     try:
         df_raw = fetch_stock_data(req.symbol, period="1y", interval="1d")
         if df_raw.empty or len(df_raw) < 25:

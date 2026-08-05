@@ -7,9 +7,10 @@ import VolumeScreener from './components/VolumeScreener';
 import Backtesting from './components/Backtesting';
 import AIInsights from './components/AIInsights';
 import BrainDashboard from './components/BrainDashboard';
+import PaperTrading from './components/PaperTrading';
 import HostingGuideModal from './components/HostingGuideModal';
 import { fetchPopularStocks, fetchStockAnalysis } from './services/api';
-import { BarChart3, Filter, Play, Cpu, AlertCircle, Sparkles } from 'lucide-react';
+import { BarChart3, Filter, Play, Cpu, AlertCircle, Sparkles, DollarSign } from 'lucide-react';
 
 export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('RELIANCE.NS');
@@ -93,6 +94,12 @@ export default function App() {
             <Sparkles size={18} color="var(--accent-gold)" /> AI Self-Learning Brain & Zero-Loss Finder
           </button>
           <button
+            className={`tab-btn ${activeTab === 'paper' ? 'active' : ''}`}
+            onClick={() => setActiveTab('paper')}
+          >
+            <DollarSign size={18} color="var(--accent-green)" /> Paper Trading & Risk Simulator
+          </button>
+          <button
             className={`tab-btn ${activeTab === 'backtest' ? 'active' : ''}`}
             onClick={() => setActiveTab('backtest')}
           >
@@ -138,7 +145,12 @@ export default function App() {
           <BrainDashboard selectedSymbol={selectedSymbol} onApplyStrategy={handleApplyStrategy} />
         )}
 
-        {/* Tab 4: Backtest */}
+        {/* Tab 4: Paper Trading */}
+        {activeTab === 'paper' && (
+          <PaperTrading selectedSymbol={selectedSymbol} />
+        )}
+
+        {/* Tab 5: Backtest */}
         {activeTab === 'backtest' && (
           <Backtesting selectedSymbol={selectedSymbol} initialStrategy={appliedStrategy} />
         )}
