@@ -15,6 +15,8 @@ export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('RELIANCE.NS');
   const [popularStocks, setPopularStocks] = useState([]);
   const [stockData, setStockData] = useState(null);
+  const [period, setPeriod] = useState('6mo');
+  const [interval, setInterval] = useState('1d');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -34,7 +36,7 @@ export default function App() {
       setLoading(true);
       setError(null);
       try {
-        const data = await fetchStockAnalysis(selectedSymbol);
+        const data = await fetchStockAnalysis(selectedSymbol, period, interval);
         setStockData(data);
       } catch (err) {
         setError(`Failed to fetch stock data for ${selectedSymbol}.`);
@@ -43,7 +45,12 @@ export default function App() {
       }
     }
     loadStockDetails();
-  }, [selectedSymbol]);
+  }, [selectedSymbol, period, interval]);
+
+  const handleTimeframeChange = (newPeriod, newInterval) => {
+    setPeriod(newPeriod);
+    setInterval(newInterval);
+  };
 
   const handleApplyStrategy = (strategy) => {
     setAppliedStrategy(strategy);
@@ -66,7 +73,6 @@ export default function App() {
           onSelectSymbol={setSelectedSymbol}
         />
 
-        {/* Tab Navigation */}
         <div className="tabs-header">
           <button
             className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}
@@ -107,7 +113,12 @@ export default function App() {
           ) : (
             <div className="grid-2col">
               <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
-                <StockChart stockData={stockData} />
+                <StockChart
+                  stockData={stockData}
+                  selectedPeriod={period}
+                  selectedInterval={interval}
+                  onTimeframeChange={handleTimeframeChange}
+                />
                 <AIInsights stockData={stockData} />
               </div>
               <div>

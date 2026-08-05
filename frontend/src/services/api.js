@@ -21,14 +21,25 @@ export async function fetchPopularStocks() {
   }
 }
 
-export async function fetchStockAnalysis(symbol, period = "6m") {
+export async function fetchStockAnalysis(symbol, period = "6mo", interval = "1d") {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?period=${period}`);
+    const res = await fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}?period=${period}&interval=${interval}`);
     if (!res.ok) throw new Error(`Stock ${symbol} not found`);
     return await res.json();
   } catch (err) {
     console.error("Error fetching stock analysis:", err);
     throw err;
+  }
+}
+
+export async function fetchLiveQuote(symbol) {
+  try {
+    const res = await fetch(`${API_BASE_URL}/api/stocks/${encodeURIComponent(symbol)}/quote`);
+    if (!res.ok) throw new Error("Failed to fetch live quote");
+    return await res.json();
+  } catch (err) {
+    console.error("Error fetching live quote:", err);
+    return null;
   }
 }
 

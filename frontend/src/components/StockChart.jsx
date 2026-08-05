@@ -1,14 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ResponsiveContainer, ComposedChart, Line, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Area
 } from 'recharts';
-import { Layers, Activity, TrendingUp } from 'lucide-react';
+import { Activity, RefreshCw, Zap, Clock } from 'lucide-react';
 
-export default function StockChart({ stockData }) {
-  const [chartType, setChartType] = useState('price_vol'); // 'price_vol' or 'obv'
-  
+export default function StockChart({ stockData, selectedPeriod, selectedInterval, onTimeframeChange }) {
+  const [chartType, setChartType] = useState('price_vol');
+  const [autoRefresh, setAutoRefresh] = useState(false);
+
+  useEffect(() => {
+    let intervalId;
+    if (autoRefresh) {
+      intervalId = setInterval(() => {
+        onTimeframeChange(selectedPeriod, selectedInterval);
+      }, 10000); // 10s live polling
+    }
+    return () => clearInterval(intervalId);
+  }, [autoRefresh, selectedPeriod, selectedInterval]);
+
   if (!stockData || !stockData.candles) return null;
-  const { candles, symbol } = stockData;
+  const { candles, symbol, latest } = stockData;
+
+  const timeframes = [
+    { label: '⚡ 1D Intraday (5m)', period: '1d', interval: '5m' },
+    { label: '1M', period: '1mo', interval: '1d' },
+    { label: '6M', period: '6mo', interval: '1d' },
+    { label: '1Y', period: '1y', interval: '1d' },
+    { label: '5Y', period: '5y', interval: '1d' }
+  ];
 
   const CustomTooltip = ({ active, payload, label }) => {
     if (active && payload && payload.length) {
@@ -28,7 +47,6 @@ export default function StockChart({ stockData }) {
           <div>VWAP: <strong style={{ color: 'var(--accent-blue)' }}>₹{data.VWAP}</strong></div>
           <div>Volume: <strong style={{ color: 'var(--accent-green)' }}>{data.Volume?.toLocaleString()}</strong></div>
           <div>Vol Surge: <strong>{data.Vol_Surge_Ratio}x</strong></div>
-          <div>OBV: <span>{data.OBV?.toLocaleString()}</span></div>
         </div>
       );
     }
@@ -37,30 +55,42 @@ export default function StockChart({ stockData }) {
 
   return (
     <div className="card">
-      <div className="card-header">
+      <div className="card-header" style={{ flexWrap: 'wrap', gap: '12px' }}>
         <div className="card-title">
           <Activity color="var(--accent-green)" size={20} />
-          {symbol} - Price Action & Volume Technical Indicators
+          {symbol} - Price Action & Volume Indicators
+          {selectedInterval === '5m' && (
+            <span className="badge badge-success" style={{ marginLeft: 6, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+              <span className="live-pulse"></span> INTRADAY LIVE (5m)
+            </span>
+          )}
         </div>
-        <div style={{ display: 'flex', gap: '8px' }}>
+
+        {/* Timeframe selector & Auto-Refresh Toggle */}
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' }}>
           <button
-            className={`btn ${chartType === 'price_vol' ? 'btn-primary' : ''}`}
-            onClick={() => setChartType('price_vol')}
+            className={`btn ${autoRefresh ? 'btn-primary' : ''}`}
+            onClick={() => setAutoRefresh(!autoRefresh)}
+            style={{ padding: '6px 12px', fontSize: '0.78rem' }}
           >
-            Price + VWAP + Volume
+            <Clock size={14} /> Auto-Stream (10s): {autoRefresh ? 'ON' : 'OFF'}
           </button>
-          <button
-            className={`btn ${chartType === 'obv' ? 'btn-primary' : ''}`}
-            onClick={() => setChartType('obv')}
-          >
-            OBV & Money Flow
-          </button>
+
+          {timeframes.map((tf) => (
+            <button
+              key={tf.label}
+              className={`btn ${selectedPeriod === tf.period && selectedInterval === tf.interval ? 'btn-primary' : ''}`}
+              onClick={() => onTimeframeChange(tf.period, tf.interval)}
+              style={{ padding: '6px 12px', fontSize: '0.78rem' }}
+            >
+              {tf.label}
+            </button>
+          ))}
         </div>
       </div>
 
       {chartType === 'price_vol' ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          {/* Price & VWAP Chart */}
           <div style={{ height: 260, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={candles} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -74,7 +104,6 @@ export default function StockChart({ stockData }) {
             </ResponsiveContainer>
           </div>
 
-          {/* Volume Bars & 20 SMA Volume Line */}
           <div style={{ height: 140, width: '100%' }}>
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={candles} margin={{ top: 0, right: 10, left: -20, bottom: 0 }}>
@@ -89,7 +118,6 @@ export default function StockChart({ stockData }) {
           </div>
         </div>
       ) : (
-        /* OBV Panel */
         <div style={{ height: 380, width: '100%' }}>
           <ResponsiveContainer width="100%" height="100%">
             <ComposedChart data={candles} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
