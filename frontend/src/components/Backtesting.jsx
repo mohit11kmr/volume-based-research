@@ -3,16 +3,25 @@ import { Play, TrendingUp, ShieldAlert, Award, DollarSign } from 'lucide-react';
 import { ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { runBacktest } from '../services/api';
 
-export default function Backtesting({ selectedSymbol }) {
-  const [volMult, setVolMult] = useState(2.0);
-  const [holdDays, setHoldDays] = useState(5);
-  const [stopLoss, setStopLoss] = useState(2.0);
-  const [takeProfit, setTakeProfit] = useState(6.0);
+export default function Backtesting({ selectedSymbol, initialStrategy }) {
+  const [volMult, setVolMult] = useState(initialStrategy ? initialStrategy.volumeMultiplier : 2.0);
+  const [holdDays, setHoldDays] = useState(initialStrategy ? initialStrategy.holdingDays : 5);
+  const [stopLoss, setStopLoss] = useState(initialStrategy ? initialStrategy.stopLossPct : 2.0);
+  const [takeProfit, setTakeProfit] = useState(initialStrategy ? initialStrategy.takeProfitPct : 6.0);
   const [capital, setCapital] = useState(100000);
   
   const [result, setResult] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (initialStrategy) {
+      setVolMult(initialStrategy.volumeMultiplier);
+      setHoldDays(initialStrategy.holdingDays);
+      setStopLoss(initialStrategy.stopLossPct);
+      setTakeProfit(initialStrategy.takeProfitPct);
+    }
+  }, [initialStrategy]);
 
   const handleRunBacktest = async () => {
     setLoading(true);
@@ -36,7 +45,7 @@ export default function Backtesting({ selectedSymbol }) {
 
   useEffect(() => {
     handleRunBacktest();
-  }, [selectedSymbol]);
+  }, [selectedSymbol, volMult, holdDays, stopLoss, takeProfit]);
 
   return (
     <div className="card">
@@ -44,6 +53,11 @@ export default function Backtesting({ selectedSymbol }) {
         <div className="card-title">
           <Play color="var(--accent-green)" size={20} />
           Volume Strategy Backtester - {selectedSymbol}
+          {initialStrategy && (
+            <span className="badge badge-warning" style={{ fontSize: '0.75rem', marginLeft: 8 }}>
+              Applied AI Zero-Loss Strategy
+            </span>
+          )}
         </div>
       </div>
 
@@ -67,6 +81,7 @@ export default function Backtesting({ selectedSymbol }) {
             style={{ width: '100%', background: 'var(--bg-card)', color: '#FFF', border: '1px solid var(--border-color)', padding: '8px', borderRadius: '6px' }}
           >
             <option value="1.5">1.5x Avg Volume</option>
+            <option value="1.8">1.8x Avg Volume</option>
             <option value="2.0">2.0x Avg Volume</option>
             <option value="2.5">2.5x Avg Volume</option>
             <option value="3.0">3.0x Avg Volume</option>
@@ -121,7 +136,6 @@ export default function Backtesting({ selectedSymbol }) {
       {/* Results View */}
       {result && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: '20px', marginTop: '10px' }}>
-          {/* Key Metrics grid */}
           <div className="metrics-row">
             <div className="metric-card">
               <div className="metric-title">Total Return</div>

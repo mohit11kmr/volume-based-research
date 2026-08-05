@@ -6,9 +6,10 @@ import VolumeProfile from './components/VolumeProfile';
 import VolumeScreener from './components/VolumeScreener';
 import Backtesting from './components/Backtesting';
 import AIInsights from './components/AIInsights';
+import BrainDashboard from './components/BrainDashboard';
 import HostingGuideModal from './components/HostingGuideModal';
 import { fetchPopularStocks, fetchStockAnalysis } from './services/api';
-import { BarChart3, Filter, Play, Cpu, AlertCircle } from 'lucide-react';
+import { BarChart3, Filter, Play, Cpu, AlertCircle, Sparkles } from 'lucide-react';
 
 export default function App() {
   const [selectedSymbol, setSelectedSymbol] = useState('RELIANCE.NS');
@@ -18,8 +19,8 @@ export default function App() {
   const [error, setError] = useState(null);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [isDeployModalOpen, setIsDeployModalOpen] = useState(false);
+  const [appliedStrategy, setAppliedStrategy] = useState(null);
 
-  // Initial load catalog
   useEffect(() => {
     async function loadCatalog() {
       const stocks = await fetchPopularStocks();
@@ -28,7 +29,6 @@ export default function App() {
     loadCatalog();
   }, []);
 
-  // Load stock data on symbol change
   useEffect(() => {
     async function loadStockDetails() {
       setLoading(true);
@@ -37,13 +37,18 @@ export default function App() {
         const data = await fetchStockAnalysis(selectedSymbol);
         setStockData(data);
       } catch (err) {
-        setError(`Failed to fetch stock data for ${selectedSymbol}. Checking backend server...`);
+        setError(`Failed to fetch stock data for ${selectedSymbol}.`);
       } finally {
         setLoading(false);
       }
     }
     loadStockDetails();
   }, [selectedSymbol]);
+
+  const handleApplyStrategy = (strategy) => {
+    setAppliedStrategy(strategy);
+    setActiveTab('backtest');
+  };
 
   return (
     <div className="app-container">
@@ -55,7 +60,6 @@ export default function App() {
       />
 
       <main className="main-content">
-        {/* Top Market Overview Row */}
         <MarketSummary
           stockData={stockData}
           popularStocks={popularStocks}
@@ -75,6 +79,12 @@ export default function App() {
             onClick={() => setActiveTab('screener')}
           >
             <Filter size={18} /> Volume Surge Screener
+          </button>
+          <button
+            className={`tab-btn ${activeTab === 'brain' ? 'active' : ''}`}
+            onClick={() => setActiveTab('brain')}
+          >
+            <Sparkles size={18} color="var(--accent-gold)" /> AI Self-Learning Brain & Zero-Loss Finder
           </button>
           <button
             className={`tab-btn ${activeTab === 'backtest' ? 'active' : ''}`}
@@ -112,9 +122,14 @@ export default function App() {
           <VolumeScreener onSelectSymbol={(sym) => { setSelectedSymbol(sym); setActiveTab('dashboard'); }} />
         )}
 
-        {/* Tab 3: Backtest */}
+        {/* Tab 3: AI Self-Learning Brain */}
+        {activeTab === 'brain' && (
+          <BrainDashboard selectedSymbol={selectedSymbol} onApplyStrategy={handleApplyStrategy} />
+        )}
+
+        {/* Tab 4: Backtest */}
         {activeTab === 'backtest' && (
-          <Backtesting selectedSymbol={selectedSymbol} />
+          <Backtesting selectedSymbol={selectedSymbol} initialStrategy={appliedStrategy} />
         )}
       </main>
 
