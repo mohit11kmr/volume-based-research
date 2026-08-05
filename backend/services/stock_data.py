@@ -11,7 +11,6 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-# List of popular Indian (NSE) and Global tech tickers
 POPULAR_STOCKS = [
     {"symbol": "RELIANCE.NS", "name": "Reliance Industries", "sector": "Energy / Conglomerate", "exchange": "NSE"},
     {"symbol": "TCS.NS", "name": "Tata Consultancy Services", "sector": "Information Technology", "exchange": "NSE"},
@@ -31,7 +30,8 @@ POPULAR_STOCKS = [
 
 def generate_synthetic_stock_data(symbol: str, days: int = 150) -> pd.DataFrame:
     """Fallback generator for stock price & volume when live data fetch fails."""
-    np.random.seed(abs(hash(symbol)) % 10000)
+    seed_val = abs(hash(symbol)) % 10000
+    np.random.seed(seed_val)
     end_date = datetime.now()
     dates = [end_date - timedelta(days=i) for i in range(days)]
     dates.reverse()
@@ -40,30 +40,28 @@ def generate_synthetic_stock_data(symbol: str, days: int = 150) -> pd.DataFrame:
     dates = [d for d in dates if d.weekday() < 5]
     n = len(dates)
     
-    base_price = 100 + (abs(hash(symbol)) % 2500)
+    base_price = 100.0 + float(seed_val % 2500)
     returns = np.random.normal(0.0005, 0.02, n)
     
-    # Inject volume spikes and price action
-    spike_indices = np.random.choice(n, size=int(n * 0.1), replace=False)
+    spike_indices = np.random.choice(n, size=max(1, int(n * 0.1)), replace=False)
     for idx in spike_indices:
-        returns[idx] += np.random.choice([0.035, -0.03])
+        returns[idx] += float(np.random.choice([0.035, -0.03]))
         
     prices = base_price * np.exp(np.cumsum(returns))
     
     df_list = []
-    base_vol = 500000 + (abs(hash(symbol)) % 2000000)
+    base_vol = 500000 + (seed_val % 2000000)
     
     for i in range(n):
-        close_p = prices[i]
-        high_p = close_p * (1 + abs(np.random.normal(0, 0.01)))
-        low_p = close_p * (1 - abs(np.random.normal(0, 0.01)))
-        open_p = low_p + np.random.uniform(0, high_p - low_p)
+        close_p = float(prices[i])
+        high_p = close_p * (1.0 + abs(float(np.random.normal(0, 0.01))))
+        low_p = close_p * (1.0 - abs(float(np.random.normal(0, 0.01))))
+        open_p = low_p + float(np.random.uniform(0, max(0.01, high_p - low_p)))
         
-        # Volume Spike Logic
         if i in spike_indices:
-            vol = int(base_vol * np.random.uniform(2.5, 4.8))
+            vol = int(base_vol * float(np.random.uniform(2.5, 4.8)))
         else:
-            vol = int(base_vol * np.random.uniform(0.6, 1.4))
+            vol = int(base_vol * float(np.random.uniform(0.6, 1.4)))
             
         df_list.append({
             "Date": dates[i].strftime("%Y-%m-%d"),
@@ -74,9 +72,7 @@ def generate_synthetic_stock_data(symbol: str, days: int = 150) -> pd.DataFrame:
             "Volume": vol
         })
         
-    df = pd.DataFrame(df_list)
-    df.set_index("Date", inplace=False)
-    return df
+    return pd.DataFrame(df_list)
 
 def fetch_stock_data(symbol: str, period: str = "6m") -> pd.DataFrame:
     """Fetch historical OHLCV data for stock symbol from yfinance or fallback."""
@@ -86,13 +82,30 @@ def fetch_stock_data(symbol: str, period: str = "6m") -> pd.DataFrame:
         try:
             ticker = yf.Ticker(clean_symbol)
             df = ticker.history(period=period)
-            if not df.empty and len(df) > 10:
+            if not df.empty and len(df) >= 5:
                 df = df.reset_index()
-                if "Date" in df.columns:
-                    df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-                return df[["Date", "Open", "High", "Low", "Close", "Volume"]]
+                
+                # Find date column (Date or Datetime)
+                date_col = None
+                for col in df.columns:
+                    if "date" in str(col).lower():
+                        date_col = col
+                        break
+                        
+                if date_col:
+                    df["Date"] = pd.to_datetime(df[date_col]).dt.strftime("%Y-%m-%d")
+                else:
+                    df["Date"] = [datetime.now().strftime("%Y-%m-%d")] * len(df)
+                    
+                for req_col in ["Open", "High", "Low", "Close", "Volume"]:
+                    if req_col not in df.columns:
+                        df[req_col] = 0.0
+                    df[req_col] = pd.to_numeric(df[req_col], errors="coerce").fillna(0.0)
+                    
+                df = df[["Date", "Open", "High", "Low", "Close", "Volume"]].copy()
+                df = df.fillna(0.0)
+                return df
         except Exception as e:
             logger.warning(f"yfinance fetch failed for {clean_symbol}: {e}")
             
-    # Fallback synthetic realistic data generator
     return generate_synthetic_stock_data(clean_symbol, days=120)
