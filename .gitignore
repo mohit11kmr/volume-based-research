@@ -11,6 +11,7 @@ frontend/yarn-debug.log*
 frontend/yarn-error.log*
 
 # Python / Backend
+__pycache__/
 backend/__pycache__/
 backend/*.pyc
 backend/*.pyo
@@ -20,6 +21,9 @@ backend/env/
 backend/venv/
 backend/ENV/
 backend/.env
+
+# Backend runtime data (SQLite memory, trained model, paper portfolio)
+backend/data/
 
 # Workflows & IDE / OS
 .github/

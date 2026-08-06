@@ -40,69 +40,133 @@ def generate_candidate_scenarios() -> List[Dict[str, Any]]:
             
     return scenarios
 
+def _evaluate_scenario(scn: Dict[str, Any], df: pd.DataFrame) -> Dict[str, Any]:
+    """Run a single backtest for a scenario on the given data slice."""
+    res = run_volume_backtest(
+        df=df,
+        volume_multiplier=scn["volumeMultiplier"],
+        holding_days=scn["holdingDays"],
+        stop_loss_pct=scn["stopLossPct"],
+        take_profit_pct=scn["takeProfitPct"],
+        initial_capital=100000.0
+    )
+
+    total_trades = res.get("totalTrades", 0)
+    win_rate = res.get("winRatePct", 0.0)
+    total_return = res.get("totalReturnPct", 0.0)
+    max_dd = res.get("maxDrawdownPct", 0.0)
+    losing_trades = res.get("losingTrades", 0)
+    winning_trades = res.get("winningTrades", 0)
+
+    is_zero_loss = (losing_trades == 0 and total_trades >= 2)
+    is_low_risk = (max_dd <= 2.5 and win_rate >= 80.0 and total_trades >= 3)
+
+    score = (win_rate * 2.0) + (total_return * 1.5) - (max_dd * 3.0)
+    if is_zero_loss:
+        score += 150.0
+    elif is_low_risk:
+        score += 75.0
+
+    return {
+        "scenarioId": scn["id"],
+        "name": scn["name"],
+        "volumeMultiplier": scn["volumeMultiplier"],
+        "holdingDays": scn["holdingDays"],
+        "stopLossPct": scn["stopLossPct"],
+        "takeProfitPct": scn["takeProfitPct"],
+        "totalTrades": total_trades,
+        "winningTrades": winning_trades,
+        "losingTrades": losing_trades,
+        "winRatePct": win_rate,
+        "totalReturnPct": total_return,
+        "maxDrawdownPct": max_dd,
+        "isZeroLoss": is_zero_loss,
+        "isLowRisk": is_low_risk,
+        "score": round(score, 2)
+    }
+
 def evaluate_and_rank_scenarios(df: pd.DataFrame, symbol: str) -> Dict[str, Any]:
-    """Execute backtests across all candidate scenarios and rank by Zero-Loss & Win Rate."""
-    if df.empty or len(df) < 25:
-        return {"error": "Insufficient data for scenario generation."}
-        
+    """Rank candidate strategies in-sample, then validate top picks OUT-OF-SAMPLE.
+
+    Walk-forward methodology:
+      1. Split data 70/30 chronologically (train = first 70%, test = last 30%).
+      2. Backtest every candidate scenario on the TRAIN window to rank them.
+      3. Re-backtest the top scenarios on the never-seen TEST window.
+      4. Report out-of-sample results — a zero-loss claim is only surfaced when
+         it survives validation on data the strategy was not tuned against.
+    """
+    if df.empty or len(df) < 40:
+        return {"error": "Insufficient data for scenario generation (need 40+ bars)."}
+
+    split_idx = int(len(df) * 0.70)
+    train_df = df.iloc[:split_idx].copy()
+    test_df = df.iloc[split_idx:].copy()
+
     candidates = generate_candidate_scenarios()
+
+    # Phase 1: rank on in-sample (train) window
     evaluated = []
-    
     for scn in candidates:
-        res = run_volume_backtest(
-            df=df,
-            volume_multiplier=scn["volumeMultiplier"],
-            holding_days=scn["holdingDays"],
-            stop_loss_pct=scn["stopLossPct"],
-            take_profit_pct=scn["takeProfitPct"],
-            initial_capital=100000.0
-        )
-        
-        total_trades = res.get("totalTrades", 0)
-        win_rate = res.get("winRatePct", 0.0)
-        total_return = res.get("totalReturnPct", 0.0)
-        max_dd = res.get("maxDrawdownPct", 0.0)
-        losing_trades = res.get("losingTrades", 0)
-        winning_trades = res.get("winningTrades", 0)
-        
-        is_zero_loss = (losing_trades == 0 and total_trades >= 2)
-        is_low_risk = (max_dd <= 2.5 and win_rate >= 80.0 and total_trades >= 3)
-        
-        # Calculate Scenario Score
-        score = (win_rate * 2.0) + (total_return * 1.5) - (max_dd * 3.0)
-        if is_zero_loss:
-            score += 150.0
-        elif is_low_risk:
-            score += 75.0
-            
-        evaluated.append({
-            "scenarioId": scn["id"],
-            "name": scn["name"],
-            "volumeMultiplier": scn["volumeMultiplier"],
-            "holdingDays": scn["holdingDays"],
-            "stopLossPct": scn["stopLossPct"],
-            "takeProfitPct": scn["takeProfitPct"],
-            "totalTrades": total_trades,
-            "winningTrades": winning_trades,
-            "losingTrades": losing_trades,
-            "winRatePct": win_rate,
-            "totalReturnPct": total_return,
-            "maxDrawdownPct": max_dd,
-            "isZeroLoss": is_zero_loss,
-            "isLowRisk": is_low_risk,
-            "score": round(score, 2)
-        })
-        
-    # Sort scenarios by score descending
+        entry = _evaluate_scenario(scn, train_df)
+        if entry["totalTrades"] >= 1:
+            evaluated.append(entry)
+
     evaluated.sort(key=lambda x: x["score"], reverse=True)
-    
-    zero_loss_setups = [e for e in evaluated if e["isZeroLoss"]]
     top_scenarios = evaluated[:8]
-    
+    zero_loss_setups = [e for e in evaluated if e["isZeroLoss"]]
+    scenarios_to_validate = top_scenarios[:]
+    for zl in zero_loss_setups:
+        if zl not in scenarios_to_validate:
+            scenarios_to_validate.append(zl)
+    scenarios_to_validate = scenarios_to_validate[:8]
+
+    # Phase 2: validate top picks on out-of-sample (test) window
+    validated = []
+    for top in scenarios_to_validate:
+        oos = _evaluate_scenario(
+            {
+                "id": top["scenarioId"],
+                "name": top["name"],
+                "volumeMultiplier": top["volumeMultiplier"],
+                "holdingDays": top["holdingDays"],
+                "stopLossPct": top["stopLossPct"],
+                "takeProfitPct": top["takeProfitPct"]
+            },
+            test_df
+        )
+        top = dict(top)
+        top["outOfSample"] = oos
+        top["oosWinRatePct"] = oos["winRatePct"]
+        top["oosTotalReturnPct"] = oos["totalReturnPct"]
+        top["oosMaxDrawdownPct"] = oos["maxDrawdownPct"]
+        top["oosTotalTrades"] = oos["totalTrades"]
+        top["isZeroLossValidated"] = oos["isZeroLoss"] and oos["totalTrades"] >= 2
+        validated.append(top)
+
+    # Only honest zero-loss survivors of out-of-sample validation
+    oos_zero_loss = [v for v in validated if v.get("isZeroLossValidated")]
+    oos_survivors = [v for v in validated if v["outOfSample"]["winRatePct"] >= 80.0 and v["outOfSample"]["totalTrades"] >= 2]
+
     return {
         "symbol": symbol,
         "totalScenariosEvaluated": len(evaluated),
         "zeroLossScenariosFound": len(zero_loss_setups),
-        "topScenarios": top_scenarios,
-        "zeroLossScenarios": zero_loss_setups[:5] if zero_loss_setups else top_scenarios[:3]
+        "zeroLossValidatedOutOfSample": len(oos_zero_loss),
+        "topScenarios": validated,
+        "zeroLossScenarios": oos_zero_loss[:5] if oos_zero_loss else validated[:3],
+        "survivingScenarios": oos_survivors[:5],
+        "validationMethod": "walk-forward (70/30 chronological split)",
+        "isInSample": True,
+        "isOutOfSampleValidated": True,
+        "trainWindow": {
+            "start": str(train_df["Date"].iloc[0]) if "Date" in train_df else "N/A",
+            "end": str(train_df["Date"].iloc[-1]) if "Date" in train_df else "N/A",
+            "bars": int(len(train_df))
+        },
+        "testWindow": {
+            "start": str(test_df["Date"].iloc[0]) if "Date" in test_df else "N/A",
+            "end": str(test_df["Date"].iloc[-1]) if "Date" in test_df else "N/A",
+            "bars": int(len(test_df))
+        },
+        "note": "Ranking uses the TRAIN window; performance claims above are re-checked on the held-out TEST window (out-of-sample). A 'Zero-Loss' label is only displayed after it survives out-of-sample validation. Past performance is NOT a guarantee of future results."
     }

@@ -3,20 +3,36 @@ import {
   ResponsiveContainer, ComposedChart, Line, Bar, XAxis, YAxis, Tooltip, CartesianGrid, Area
 } from 'recharts';
 import { Activity, RefreshCw, Zap, Clock } from 'lucide-react';
+import { openLiveQuoteSocket } from '../services/api';
 
 export default function StockChart({ stockData, selectedPeriod, selectedInterval, onTimeframeChange }) {
   const [chartType, setChartType] = useState('price_vol');
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [liveQuote, setLiveQuote] = useState(null);
 
   useEffect(() => {
     let intervalId;
-    if (autoRefresh) {
+    let socket = null;
+
+    if (autoRefresh && stockData?.symbol) {
       intervalId = setInterval(() => {
         onTimeframeChange(selectedPeriod, selectedInterval);
-      }, 10000); // 10s live polling
+      }, 30000); // 30s candle refresh fallback
+
+      socket = openLiveQuoteSocket(
+        stockData.symbol,
+        (quote) => {
+          if (quote && quote.lastPrice) setLiveQuote(quote);
+        },
+        () => setLiveQuote(null)
+      );
     }
-    return () => clearInterval(intervalId);
-  }, [autoRefresh, selectedPeriod, selectedInterval]);
+    return () => {
+      clearInterval(intervalId);
+      if (socket) socket.close();
+      setLiveQuote(null);
+    };
+  }, [autoRefresh, selectedPeriod, selectedInterval, stockData?.symbol]);
 
   if (!stockData || !stockData.candles) return null;
   const { candles, symbol, latest } = stockData;
@@ -64,6 +80,14 @@ export default function StockChart({ stockData, selectedPeriod, selectedInterval
               <span className="live-pulse"></span> INTRADAY LIVE (5m)
             </span>
           )}
+          {liveQuote && (
+            <span className="badge" style={{ marginLeft: 6, background: 'rgba(0,245,160,0.15)', color: liveQuote.priceChangePct >= 0 ? 'var(--accent-green)' : 'var(--accent-red)', display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span className="live-pulse"></span>
+              LTP ₹{liveQuote.lastPrice?.toLocaleString()}
+              <span>({liveQuote.priceChangePct >= 0 ? '+' : ''}{liveQuote.priceChangePct}%)</span>
+              <span style={{ opacity: 0.7, fontSize: '0.7rem' }}>{liveQuote.dataSource}</span>
+            </span>
+          )}
         </div>
 
         {/* Timeframe selector & Auto-Refresh Toggle */}
@@ -73,7 +97,7 @@ export default function StockChart({ stockData, selectedPeriod, selectedInterval
             onClick={() => setAutoRefresh(!autoRefresh)}
             style={{ padding: '6px 12px', fontSize: '0.78rem' }}
           >
-            <Clock size={14} /> Auto-Stream (10s): {autoRefresh ? 'ON' : 'OFF'}
+            <Clock size={14} /> Auto-Stream (Live WS): {autoRefresh ? 'ON' : 'OFF'}
           </button>
 
           {timeframes.map((tf) => (

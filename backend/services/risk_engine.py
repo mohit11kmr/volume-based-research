@@ -1,6 +1,22 @@
 import math
+import os
+import json
+import threading
+import hashlib
 from typing import Dict, Any, List
 from datetime import datetime
+
+STATE_DIR = os.path.join(os.path.dirname(__file__), "..", "data")
+
+def _sanitize_user_id(user_id: str) -> str:
+    """Hash arbitrary user ids to a safe filename fragment."""
+    if not user_id:
+        return "default"
+    digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:16]
+    return f"user_{digest}"
+
+def _state_path_for(user_id: str) -> str:
+    return os.path.join(STATE_DIR, f"paper_{_sanitize_user_id(user_id)}.json")
 
 class RiskEngine:
     def __init__(self, max_risk_per_trade_pct: float = 2.0, max_daily_drawdown_pct: float = 3.0):
@@ -71,13 +87,46 @@ class RiskEngine:
 
 
 class PaperTradingSimulator:
-    def __init__(self, initial_capital: float = 100000.0):
+    def __init__(self, initial_capital: float = 100000.0, user_id: str = "default"):
         self.initial_capital = initial_capital
         self.cash_balance = initial_capital
         self.open_positions: List[Dict[str, Any]] = []
         self.closed_trades: List[Dict[str, Any]] = []
         self.next_position_id = 1
         self.risk_engine = RiskEngine(max_risk_per_trade_pct=2.0, max_daily_drawdown_pct=3.0)
+        self.state_path = _state_path_for(user_id)
+        self._load_state()
+
+    def _save_state(self):
+        """Persist portfolio state to disk so it survives server restarts."""
+        try:
+            os.makedirs(STATE_DIR, exist_ok=True)
+            state = {
+                "initialCapital": self.initial_capital,
+                "cashBalance": self.cash_balance,
+                "openPositions": self.open_positions,
+                "closedTrades": self.closed_trades,
+                "nextPositionId": self.next_position_id
+            }
+            with open(self.state_path, "w") as f:
+                json.dump(state, f, indent=2, default=str)
+        except Exception:
+            pass
+
+    def _load_state(self):
+        """Restore previously persisted portfolio state if available."""
+        if not os.path.exists(self.state_path):
+            return
+        try:
+            with open(self.state_path) as f:
+                state = json.load(f)
+            self.initial_capital = float(state.get("initialCapital", self.initial_capital))
+            self.cash_balance = float(state.get("cashBalance", self.initial_capital))
+            self.open_positions = state.get("openPositions", [])
+            self.closed_trades = state.get("closedTrades", [])
+            self.next_position_id = int(state.get("nextPositionId", 1))
+        except Exception:
+            pass
 
     def get_portfolio_summary(self, live_prices: Dict[str, float] = None) -> Dict[str, Any]:
         """Return virtual portfolio balance, open positions, and total PnL metrics."""
@@ -161,6 +210,7 @@ class PaperTradingSimulator:
 
         self.open_positions.append(pos)
         self.next_position_id += 1
+        self._save_state()
 
         return {
             "success": True,
@@ -198,6 +248,7 @@ class PaperTradingSimulator:
         }
 
         self.closed_trades.append(trade_log)
+        self._save_state()
 
         return {
             "success": True,
@@ -211,3 +262,32 @@ class PaperTradingSimulator:
         self.open_positions = []
         self.closed_trades = []
         self.next_position_id = 1
+        self._save_state()
+
+
+class PaperTradingManager:
+    """Thread-safe registry of per-user PaperTradingSimulator instances.
+
+    Every user id gets its own isolated portfolio persisted to a separate
+    JSON state file. Unknown/blank ids share the "default" portfolio.
+    """
+
+    def __init__(self, initial_capital: float = 100000.0):
+        self.initial_capital = initial_capital
+        self._sims: Dict[str, PaperTradingSimulator] = {}
+        self._lock = threading.Lock()
+
+    def get(self, user_id: str) -> PaperTradingSimulator:
+        uid = _sanitize_user_id(user_id or "default")
+        with self._lock:
+            if uid not in self._sims:
+                self._sims[uid] = PaperTradingSimulator(
+                    initial_capital=self.initial_capital,
+                    user_id=uid
+                )
+            return self._sims[uid]
+
+    def reset_all(self):
+        with self._lock:
+            for sim in self._sims.values():
+                sim.reset_portfolio()

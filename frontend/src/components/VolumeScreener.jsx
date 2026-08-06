@@ -13,7 +13,7 @@ export default function VolumeScreener({ onSelectSymbol }) {
     setError(null);
     try {
       const data = await fetchVolumeScreener(minSurge);
-      setResults(data.screenerResults || []);
+      setResults(data.results || data.screenerResults || []);
     } catch (err) {
       setError("Unable to connect to screener backend service.");
     } finally {
@@ -71,8 +71,10 @@ export default function VolumeScreener({ onSelectSymbol }) {
                 <th>Price</th>
                 <th>Price Change</th>
                 <th>Vol Surge Multiple</th>
+                <th>MFI</th>
                 <th>CMF Flow</th>
                 <th>Institutional Signal</th>
+                <th>Pivot</th>
               </tr>
             </thead>
             <tbody>
@@ -93,6 +95,9 @@ export default function VolumeScreener({ onSelectSymbol }) {
                         🔥 {stk.volumeSurgeRatio}x
                       </span>
                     </td>
+                    <td style={{ color: stk.mfi >= 80 ? 'var(--accent-red)' : stk.mfi >= 60 ? 'var(--accent-green)' : 'var(--text-muted)' }}>
+                      {stk.mfi ?? '—'}
+                    </td>
                     <td style={{ color: stk.cmf > 0.1 ? 'var(--accent-green)' : 'var(--text-muted)' }}>
                       {stk.cmf}
                     </td>
@@ -104,11 +109,18 @@ export default function VolumeScreener({ onSelectSymbol }) {
                         {stk.signal}
                       </span>
                     </td>
+                    <td style={{ textAlign: 'center' }}>
+                      {stk.pocketPivot ? (
+                        <span className="badge badge-success" title="Up-day volume beat all down-days in last 10 sessions">POCKET</span>
+                      ) : (
+                        <span style={{ color: 'var(--text-muted)' }}>—</span>
+                      )}
+                    </td>
                   </tr>
                 ))
               ) : (
                 <tr>
-                  <td colSpan="7" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
+                  <td colSpan="8" style={{ textAlign: 'center', padding: '24px', color: 'var(--text-muted)' }}>
                     No stocks currently trading above {minSurge}x average volume. Try lowering the threshold.
                   </td>
                 </tr>

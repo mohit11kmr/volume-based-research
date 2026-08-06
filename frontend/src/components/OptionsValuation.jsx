@@ -34,6 +34,12 @@ export default function OptionsValuation({ selectedSymbol }) {
           <div className="card-title">
             <Tag color="var(--accent-gold)" size={24} />
             Option Premium Valuation & Greeks Engine - {data.symbol}
+            <span
+              className={data.isRealData ? "badge badge-success" : "badge badge-warning"}
+              style={{ marginLeft: 8, fontSize: '0.72rem' }}
+            >
+              {data.isRealData ? "LIVE CHAIN" : "BS ESTIMATE"}
+            </span>
           </div>
           <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
             <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>Expiry:</span>

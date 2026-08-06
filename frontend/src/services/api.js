@@ -1,6 +1,41 @@
 // Backend API service configuration
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'https://volume-based-research.onrender.com';
 
+// Generate / persist a stable per-browser user id so paper trading is isolated per user
+function getUserId() {
+  let uid = localStorage.getItem('volumetric_user_id');
+  if (!uid) {
+    uid = 'user-' + Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 10);
+    localStorage.setItem('volumetric_user_id', uid);
+  }
+  return uid;
+}
+
+function userHeaders(extra = {}) {
+  return { "X-User-Id": getUserId(), ...extra };
+}
+
+// Open a WebSocket stream for live quotes (falls back to null if unsupported)
+export function openLiveQuoteSocket(symbol, onQuote, onError) {
+  const wsScheme = API_BASE_URL.startsWith('https') ? 'wss' : 'ws';
+  const wsUrl = `${wsScheme}://${API_BASE_URL.replace(/^https?:\/\//, '')}/ws/${encodeURIComponent(symbol)}`;
+  try {
+    const socket = new WebSocket(wsUrl);
+    socket.onmessage = (event) => {
+      try {
+        onQuote(JSON.parse(event.data));
+      } catch (e) { /* ignore malformed frame */ }
+    };
+    socket.onerror = (event) => {
+      if (onError) onError(event);
+      socket.close();
+    };
+    return socket;
+  } catch (e) {
+    return null;
+  }
+}
+
 // Local Fallback Synthetic Data Generator to guarantee UI NEVER stays blank
 function generateFallbackStockData(symbol) {
   const candles = [];
@@ -67,7 +102,9 @@ function generateFallbackStockData(symbol) {
       },
       keyLevels: { support: Math.round(latest.Close * 0.95), resistance: Math.round(latest.Close * 1.05), vwap: latest.VWAP }
     },
-    mlPrediction: { mlWinProbabilityPct: 84.0, confidenceLabel: "HIGH", isHighProbability: true }
+    mlPrediction: { mlWinProbabilityPct: 84.0, confidenceLabel: "HIGH", isHighProbability: true },
+    dataSource: "synthetic",
+    isSynthetic: true
   };
 }
 
@@ -78,7 +115,8 @@ export async function fetchPopularStocks() {
     const res = await fetch(`${API_BASE_URL}/api/stocks`, { signal: controller.signal });
     clearTimeout(timeoutId);
     if (!res.ok) throw new Error("Failed to fetch stock list");
-    return await res.json();
+    const data = await res.json();
+    return data.stocks || data || [];
   } catch (err) {
     return [
       { symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Conglomerate", exchange: "NSE" },
@@ -130,7 +168,9 @@ export async function fetchOptionsValuation(symbol = "RELIANCE.NS", daysToExpiry
         bestCallValuation: "CHEAP (UNDERVALUED)",
         bestPutStrike: 1200,
         bestPutValuation: "CHEAP (UNDERVALUED)"
-      }
+      },
+      isRealData: false,
+      dataSource: "BLACK-SCHOLES ESTIMATE"
     };
   }
 }
@@ -155,7 +195,7 @@ export async function fetchLiveQuote(symbol) {
 
 export async function fetchPaperPortfolio() {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/paper-trading/portfolio`);
+    const res = await fetch(`${API_BASE_URL}/api/paper-trading/portfolio`, { headers: userHeaders() });
     if (!res.ok) throw new Error("Failed to fetch paper portfolio");
     return await res.json();
   } catch (err) {
@@ -180,7 +220,7 @@ export async function executePaperBuy(symbol, stopLossPct = 2.0, takeProfitPct =
   try {
     const res = await fetch(`${API_BASE_URL}/api/paper-trading/buy`, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: userHeaders({ "Content-Type": "application/json" }),
       body: JSON.stringify({ symbol, stopLossPct, takeProfitPct })
     });
     if (!res.ok) {
@@ -196,7 +236,7 @@ export async function executePaperBuy(symbol, stopLossPct = 2.0, takeProfitPct =
 
 export async function closePaperPosition(positionId) {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/paper-trading/close/${positionId}`, { method: "POST" });
+    const res = await fetch(`${API_BASE_URL}/api/paper-trading/close/${positionId}`, { method: "POST", headers: userHeaders() });
     if (!res.ok) throw new Error("Failed to close position");
     return await res.json();
   } catch (err) {
@@ -207,7 +247,7 @@ export async function closePaperPosition(positionId) {
 
 export async function resetPaperAccount() {
   try {
-    const res = await fetch(`${API_BASE_URL}/api/paper-trading/reset`, { method: "POST" });
+    const res = await fetch(`${API_BASE_URL}/api/paper-trading/reset`, { method: "POST", headers: userHeaders() });
     if (!res.ok) throw new Error("Failed to reset account");
     return await res.json();
   } catch (err) {
@@ -225,11 +265,12 @@ export async function fetchVolumeScreener(minSurge = 1.5) {
     return {
       count: 3,
       minSurgeApplied: minSurge,
-      screenerResults: [
-        { symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy", exchange: "NSE", closePrice: 1290.0, priceChangePct: 1.5, volume: 18500000, volumeSurgeRatio: 2.4, cmf: 0.22, signal: "BULLISH BREAKOUT", mlWinProbability: 88.0 },
-        { symbol: "TATAMOTORS.NS", name: "Tata Motors", sector: "Auto", exchange: "NSE", closePrice: 945.0, priceChangePct: 2.1, volume: 14200000, volumeSurgeRatio: 2.1, cmf: 0.18, signal: "BULLISH BREAKOUT", mlWinProbability: 82.0 },
-        { symbol: "INFY.NS", name: "Infosys Ltd", sector: "IT", exchange: "NSE", closePrice: 1820.0, priceChangePct: 0.8, volume: 9800000, volumeSurgeRatio: 1.8, cmf: 0.14, signal: "BULLISH BREAKOUT", mlWinProbability: 79.0 }
-      ]
+      results: [
+        { symbol: "RELIANCE.NS", name: "Reliance Industries", sector: "Energy / Conglomerate", exchange: "NSE", closePrice: 1290.0, priceChangePct: 1.5, volume: 18500000, volumeSurgeRatio: 2.4, volumeZScore: 2.8, cmf: 0.22, mfi: 68.0, pocketPivot: true, adlTrend: "RISING", signal: "BULLISH BREAKOUT", mlWinProbability: 88.0, valueArea: { vah: 1320.0, val: 1240.0, poc: 1280.0 }, dataSource: "synthetic" },
+        { symbol: "TATAMOTORS.NS", name: "Tata Motors", sector: "Automobile", exchange: "NSE", closePrice: 945.0, priceChangePct: 2.1, volume: 14200000, volumeSurgeRatio: 2.1, volumeZScore: 2.2, cmf: 0.18, mfi: 62.0, pocketPivot: false, adlTrend: "RISING", signal: "BULLISH BREAKOUT", mlWinProbability: 82.0, valueArea: { vah: 970.0, val: 910.0, poc: 940.0 }, dataSource: "synthetic" },
+        { symbol: "INFY.NS", name: "Infosys Ltd", sector: "Information Technology", exchange: "NSE", closePrice: 1820.0, priceChangePct: 0.8, volume: 9800000, volumeSurgeRatio: 1.8, volumeZScore: 1.6, cmf: 0.14, mfi: 58.0, pocketPivot: false, adlTrend: "RISING", signal: "BULLISH BREAKOUT", mlWinProbability: 79.0, valueArea: { vah: 1850.0, val: 1780.0, poc: 1820.0 }, dataSource: "synthetic" }
+      ],
+      dataSource: "synthetic"
     };
   }
 }
@@ -245,16 +286,18 @@ export async function runBacktest(params) {
     return await res.json();
   } catch (err) {
     return {
-      symbol: params.symbol,
       initialCapital: params.initialCapital,
       finalCapital: 114500.0,
       totalReturnPct: 14.5,
+      totalTrades: 14,
+      winningTrades: 11,
+      losingTrades: 3,
       winRatePct: 78.5,
-      totalTradesCount: 14,
-      winningTradesCount: 11,
-      losingTradesCount: 3,
       maxDrawdownPct: 2.1,
-      tradeLogs: []
+      equityCurve: [],
+      tradeLog: [],
+      dataSource: "synthetic",
+      isSynthetic: true
     };
   }
 }
@@ -282,27 +325,62 @@ export async function fetchBrainScenarios(symbol) {
   } catch (err) {
     return {
       symbol: symbol.toUpperCase(),
-      totalScenariosTested: 60,
-      bestScenario: {
-        scenarioId: "SCENARIO_ZERO_LOSS_01",
-        name: "Optimal High Volume Breakout",
-        surgeMultiplier: 2.2,
-        holdingDays: 4,
-        stopLossPct: 1.5,
-        takeProfitPct: 5.5,
-        backtestResult: { winRatePct: 95.0, totalReturnPct: 24.5, maxDrawdownPct: 1.2 }
-      },
-      zeroLossScenarios: [
+      totalScenariosEvaluated: 60,
+      zeroLossScenariosFound: 1,
+      zeroLossValidatedOutOfSample: 0,
+      validationMethod: "walk-forward (70/30 chronological split)",
+      isInSample: true,
+      isOutOfSampleValidated: true,
+      trainWindow: { start: "N/A", end: "N/A", bars: 175 },
+      testWindow: { start: "N/A", end: "N/A", bars: 75 },
+      topScenarios: [
         {
-          scenarioId: "SCENARIO_ZERO_LOSS_01",
-          name: "Institutional Volume Surge + CMF > 0.15",
-          surgeMultiplier: 2.5,
+          scenarioId: "SCN-001",
+          name: "VolSurge 2.5x | SL 1.5% | TP 5%",
+          volumeMultiplier: 2.5,
           holdingDays: 3,
           stopLossPct: 1.5,
           takeProfitPct: 5.0,
-          backtestResult: { winRatePct: 95.0, totalReturnPct: 22.0, maxDrawdownPct: 0.8 }
+          totalTrades: 12,
+          winningTrades: 12,
+          losingTrades: 0,
+          winRatePct: 100.0,
+          totalReturnPct: 22.0,
+          maxDrawdownPct: 0.8,
+          isZeroLoss: true,
+          isLowRisk: true,
+          score: 999.0,
+          oosWinRatePct: 100.0,
+          oosTotalReturnPct: 18.0,
+          oosTotalTrades: 5,
+          isZeroLossValidated: true
         }
-      ]
+      ],
+      zeroLossScenarios: [
+        {
+          scenarioId: "SCN-001",
+          name: "VolSurge 2.5x | SL 1.5% | TP 5%",
+          volumeMultiplier: 2.5,
+          holdingDays: 3,
+          stopLossPct: 1.5,
+          takeProfitPct: 5.0,
+          totalTrades: 12,
+          winningTrades: 12,
+          losingTrades: 0,
+          winRatePct: 100.0,
+          totalReturnPct: 22.0,
+          maxDrawdownPct: 0.8,
+          isZeroLoss: true,
+          isLowRisk: true,
+          score: 999.0,
+          oosWinRatePct: 100.0,
+          oosTotalReturnPct: 18.0,
+          oosTotalTrades: 5,
+          isZeroLossValidated: true
+        }
+      ],
+      dataSource: "synthetic",
+      isSynthetic: true
     };
   }
 }

@@ -75,6 +75,26 @@ export default function App() {
           onSelectSymbol={setSelectedSymbol}
         />
 
+        {stockData?.isSynthetic && (
+          <div style={{
+            padding: '12px 16px',
+            background: 'rgba(255, 215, 0, 0.08)',
+            border: '1px solid var(--accent-gold)',
+            borderRadius: '10px',
+            color: 'var(--accent-gold)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontSize: '0.85rem'
+          }}>
+            <AlertCircle size={18} />
+            <span>
+              <strong>Demo Mode:</strong> Live data source is currently unavailable, so the numbers below are{' '}
+              <strong>simulated demo values</strong> — not real market data. Data will switch to live automatically once the backend is online.
+            </span>
+          </div>
+        )}
+
         <div className="tabs-header">
           <button
             className={`tab-btn ${activeTab === 'dashboard' ? 'active' : ''}`}

@@ -32,12 +32,10 @@ def run_volume_backtest(
     for i in range(20, len(df)):
         row = df.iloc[i]
         curr_date = row["Date"]
+        open_p = row["Open"]
         close_p = row["Close"]
         high_p = row["High"]
         low_p = row["Low"]
-        vol = row["Volume"]
-        vol_sma = row["Vol_SMA20"]
-        sma_close = row["SMA20_Close"]
         
         # 1. Manage active position
         if in_trade:
@@ -46,59 +44,68 @@ def run_volume_backtest(
             exit_reason = ""
             exit_price = close_p
             
-            # Check Stop Loss
-            if low_p <= stop_price:
+            # Gap open scenarios (open is decided before intraday range)
+            if open_p <= stop_price:
+                exit_trade = True
+                exit_price = stop_price
+                exit_reason = "Stop Loss Hit (Gap)"
+            elif open_p >= target_price:
+                exit_trade = True
+                exit_price = target_price
+                exit_reason = "Take Profit Hit (Gap)"
+            elif low_p <= stop_price:
                 exit_trade = True
                 exit_price = stop_price
                 exit_reason = "Stop Loss Hit"
-            # Check Take Profit
             elif high_p >= target_price:
                 exit_trade = True
                 exit_price = target_price
                 exit_reason = "Take Profit Hit"
-            # Check Max Holding Period
             elif hold_count >= holding_days:
                 exit_trade = True
                 exit_price = close_p
                 exit_reason = "Time Exit"
                 
             if exit_trade:
-                pnl = (exit_price - entry_price) * shares
+                pnl = float((exit_price - entry_price) * shares)
                 capital += pnl
                 pnl_pct = round(((exit_price - entry_price) / entry_price) * 100, 2)
                 trades.append({
                     "entryDate": entry_date,
                     "exitDate": curr_date,
-                    "entryPrice": round(entry_price, 2),
-                    "exitPrice": round(exit_price, 2),
+                    "entryPrice": round(float(entry_price), 2),
+                    "exitPrice": round(float(exit_price), 2),
                     "pnl": round(pnl, 2),
-                    "pnlPct": pnl_pct,
+                    "pnlPct": round(float(pnl_pct), 2),
                     "reason": exit_reason,
-                    "win": pnl > 0
+                    "win": bool(pnl > 0)
                 })
                 in_trade = False
                 
-        # 2. Check for entry condition if not in trade
-        if not in_trade and vol_sma > 0:
-            vol_ratio = vol / vol_sma
-            # Buy signal: Volume Surge > multiplier AND Price above 20 SMA
-            if vol_ratio >= volume_multiplier and close_p > sma_close:
-                in_trade = True
-                entry_price = close_p
-                entry_date = curr_date
-                target_price = entry_price * (1 + take_profit_pct / 100)
-                stop_price = entry_price * (1 - stop_loss_pct / 100)
-                hold_count = 0
-                shares = int(capital / entry_price) if entry_price > 0 else 0
-                
+        # 2. Check for entry condition using PREVIOUS bar signal, filled at THIS bar's open
+        if not in_trade and i > 0:
+            prev = df.iloc[i - 1]
+            prev_vol_sma = prev["Vol_SMA20"]
+            if prev_vol_sma > 0:
+                vol_ratio = prev["Volume"] / prev_vol_sma
+                # Buy signal: Volume Surge > multiplier AND Price above 20 SMA (confirmed on prior close)
+                if vol_ratio >= volume_multiplier and prev["Close"] > prev["SMA20_Close"]:
+                    in_trade = True
+                    entry_price = open_p
+                    entry_date = curr_date
+                    target_price = entry_price * (1 + take_profit_pct / 100)
+                    stop_price = entry_price * (1 - stop_loss_pct / 100)
+                    hold_count = 0
+                    shares = int(capital / entry_price) if entry_price > 0 else 0
+                    
         # Record equity
         current_portfolio_value = capital
         if in_trade:
-            current_portfolio_value += (close_p - entry_price) * shares
+            current_portfolio_value += float((close_p - entry_price) * shares)
             
         equity_curve.append({
             "date": curr_date,
-            "equity": round(current_portfolio_value, 2)
+            "equity": round(float(current_portfolio_value), 2)
         })
         
     total_trades = len(trades)

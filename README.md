@@ -95,5 +95,5 @@ Frontend web application accessible at: `http://localhost:3000`
 2. Select the `frontend` directory.
 3. Add Environment Variable:
    - Name: `VITE_API_URL`
-   - Value: `https://volumetric-backend.onrender.com` (Your Render backend URL)
+   - Value: `https://volume-based-research.onrender.com` (Your Render backend URL)
 4. Click **Deploy**. Your professional trading terminal is live on the internet!

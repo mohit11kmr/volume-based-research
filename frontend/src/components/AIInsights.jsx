@@ -21,6 +21,22 @@ export default function AIInsights({ stockData }) {
     { icon: <CheckCircle2 size={14} />, text: `Market Regime: ${regime} (${confidence}% confidence)` },
     { icon: <CheckCircle2 size={14} />, text: `Volume Surge vs 20-Day SMA: ${volSurge}x` },
     { icon: <CheckCircle2 size={14} />, text: `RSI(14): ${rsi14} | ATR%: ${atrPct}` },
+    ...(stockData.latest?.MFI ? [{
+      icon: <CheckCircle2 size={14} />,
+      text: `Money Flow Index (MFI-14): ${stockData.latest.MFI} ${stockData.latest.MFI >= 80 ? '— OVERBOUGHT' : stockData.latest.MFI <= 20 ? '— OVERSOLD' : ''}`
+    }] : []),
+    ...(stockData.latest?.Volume_ZScore !== undefined ? [{
+      icon: <CheckCircle2 size={14} />,
+      text: `Volume Z-Score: ${stockData.latest.Volume_ZScore}σ ${Math.abs(stockData.latest.Volume_ZScore) >= 2 ? '(statistically significant volume spike)' : '(normal range)'}`
+    }] : []),
+    ...(stockData.latest?.ADL !== undefined ? [{
+      icon: stockData.latest.ADL > (stockData.latest.ADL_EMA20 || 0) ? <ShieldCheck size={14} /> : <ShieldAlert size={14} />,
+      text: `Accumulation/Distribution (ADL): ${stockData.latest.ADL > (stockData.latest.ADL_EMA20 || 0) ? 'RISING — accumulation in progress' : 'FALLING — distribution pressure'}`
+    }] : []),
+    ...(stockData.latest?.Pocket_Pivot ? [{
+      icon: <CheckCircle2 size={14} />,
+      text: `Pocket Pivot ACTIVE — today's up-day volume beat all down-days in the last 10 sessions (institutional uptick)`
+    }] : []),
     ...(keyLevels.support || keyLevels.resistance ? [{
       icon: <ShieldCheck size={14} />,
       text: `Key Levels — Support: ₹${keyLevels.support ?? 'N/A'} | Resistance: ₹${keyLevels.resistance ?? 'N/A'} | VWAP: ₹${keyLevels.vwap ?? 'N/A'}`

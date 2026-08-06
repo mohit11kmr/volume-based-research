@@ -106,6 +106,25 @@ export default function BrainDashboard({ selectedSymbol, onApplyStrategy }) {
           Below are the lowest-risk parameter combinations optimized for zero/minimal losses.
         </p>
 
+        {scenariosData?.isOutOfSampleValidated && (
+          <div style={{
+            background: 'rgba(56, 189, 248, 0.08)',
+            border: '1px solid rgba(56, 189, 248, 0.25)',
+            borderRadius: '8px',
+            padding: '12px 16px',
+            fontSize: '0.82rem',
+            color: 'var(--text-muted)',
+            marginBottom: '14px'
+          }}>
+            <strong style={{ color: 'var(--accent-blue)' }}>Walk-Forward Validation Active:</strong> scenarios were ranked on the train window
+            {scenariosData.trainWindow ? ` (${scenariosData.trainWindow.bars} bars, ${scenariosData.trainWindow.start} → ${scenariosData.trainWindow.end})` : ''}
+            , then re-tested on the held-out test window
+            {scenariosData.testWindow ? ` (${scenariosData.testWindow.bars} bars, ${scenariosData.testWindow.start} → ${scenariosData.testWindow.end})` : ''}.
+            A "ZERO LOSS" label is only shown after it survives out-of-sample validation.
+            <strong style={{ color: '#FFF' }}> OOS-validated zero-loss setups: {scenariosData.zeroLossValidatedOutOfSample ?? 0}</strong>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
             Evaluating 60+ Strategy Scenarios with AI Engine...
@@ -120,22 +139,27 @@ export default function BrainDashboard({ selectedSymbol, onApplyStrategy }) {
                   <th>Stop Loss</th>
                   <th>Take Profit</th>
                   <th>Holding Period</th>
-                  <th>Win Rate %</th>
-                  <th>Loss Count</th>
-                  <th>Total Return</th>
+                  <th>Train Win Rate</th>
+                  <th>OOS Win Rate</th>
+                  <th>OOS Return</th>
                   <th>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {scenariosData.zeroLossScenarios.map((scn, idx) => (
-                  <tr key={scn.scenarioId} style={{ background: scn.isZeroLoss ? 'rgba(255, 215, 0, 0.05)' : 'transparent' }}>
+                  <tr key={scn.scenarioId} style={{ background: scn.isZeroLoss || scn.isZeroLossValidated ? 'rgba(255, 215, 0, 0.05)' : 'transparent' }}>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <span style={{ color: 'var(--accent-gold)', fontWeight: 700 }}>#{idx + 1}</span>
                         <strong style={{ color: '#FFF' }}>{scn.name}</strong>
-                        {scn.isZeroLoss && (
+                        {scn.isZeroLossValidated && (
                           <span className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                            <Sparkles size={12} /> ZERO LOSS
+                            <Sparkles size={12} /> ZERO LOSS (OOS-VALIDATED)
+                          </span>
+                        )}
+                        {scn.isZeroLoss && !scn.isZeroLossValidated && (
+                          <span className="badge badge-success" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            IN-SAMPLE ONLY
                           </span>
                         )}
                       </div>
@@ -145,13 +169,12 @@ export default function BrainDashboard({ selectedSymbol, onApplyStrategy }) {
                     <td className="text-green">+{scn.takeProfitPct}%</td>
                     <td>{scn.holdingDays} Days</td>
                     <td className="text-green" style={{ fontWeight: 700 }}>{scn.winRatePct}%</td>
-                    <td>
-                      <span className={scn.losingTrades === 0 ? "badge badge-success" : "badge badge-warning"}>
-                        {scn.losingTrades} Losses
-                      </span>
+                    <td className={scn.oosWinRatePct >= 80 ? 'text-green' : 'text-red'} style={{ fontWeight: 700 }}>
+                      {scn.oosWinRatePct !== undefined && scn.oosWinRatePct !== null ? `${scn.oosWinRatePct}%` : '—'}
+                      {scn.oosTotalTrades !== undefined && ` (${scn.oosTotalTrades} trades)`}
                     </td>
-                    <td className={scn.totalReturnPct >= 0 ? "text-green" : "text-red"} style={{ fontWeight: 700 }}>
-                      +{scn.totalReturnPct}%
+                    <td className={scn.oosTotalReturnPct >= 0 ? 'text-green' : 'text-red'}>
+                      {scn.oosTotalReturnPct !== undefined && scn.oosTotalReturnPct !== null ? `${scn.oosTotalReturnPct >= 0 ? '+' : ''}${scn.oosTotalReturnPct}%` : '—'}
                     </td>
                     <td>
                       <button

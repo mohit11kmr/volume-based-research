@@ -20,6 +20,32 @@ export default function VolumeProfile({ stockData }) {
         Horizontal volume distribution across price levels for <strong>{symbol}</strong>. High volume nodes (POC) represent institutional consolidation zones.
       </p>
 
+      {stockData.valueArea && stockData.valueArea.vah > 0 && (
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '10px',
+          margin: '10px 0 16px',
+          padding: '12px',
+          background: 'rgba(255,215,0,0.06)',
+          borderRadius: '8px',
+          border: '1px solid rgba(255,215,0,0.2)'
+        }}>
+          <div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>VALUE AREA HIGH</div>
+            <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold)' }}>₹{stockData.valueArea.vah.toLocaleString()}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>POC</div>
+            <div style={{ fontFamily: 'var(--font-mono)', color: '#FFF' }}>₹{stockData.valueArea.poc.toLocaleString()}</div>
+          </div>
+          <div>
+            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>VALUE AREA LOW</div>
+            <div style={{ fontFamily: 'var(--font-mono)', color: 'var(--accent-gold)' }}>₹{stockData.valueArea.val.toLocaleString()}</div>
+          </div>
+        </div>
+      )}
+
       <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', marginTop: '6px' }}>
         {volumeProfile.map((bin, index) => {
           const volValue = bin.volume || 0;
